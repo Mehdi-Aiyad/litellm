@@ -153,29 +153,4 @@ def completion(
             status_code=response.status_code,
         )
     else:
-        try:
-            if len(completion_response[0]["generation"]) > 0: 
-                model_response["choices"][0]["message"]["content"] = completion_response[0]["generation"]
-        except:
-            raise SagemakerError(message=json.dumps(completion_response), status_code=response.status_code)
-
-    ## CALCULATING USAGE - baseten charges on time, not tokens - have some mapping of cost here. 
-    prompt_tokens = len(
-        encoding.encode(prompt)
-    ) 
-    completion_tokens = len(
-        encoding.encode(model_response["choices"][0]["message"].get("content", ""))
-    )
-
-    model_response["created"] = time.time()
-    model_response["model"] = model
-    model_response["usage"] = {
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": completion_tokens,
-        "total_tokens": prompt_tokens + completion_tokens,
-    }
-    return model_response
-
-def embedding():
-    # logic for parsing in - calling - parsing out model embedding calls
-    pass
+        return completion_response
