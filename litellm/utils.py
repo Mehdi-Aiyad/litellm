@@ -16,6 +16,7 @@ import random, uuid, requests
 import datetime, time
 import tiktoken
 import uuid
+import io
 import aiohttp
 import logging
 import asyncio
@@ -34,7 +35,6 @@ from .integrations.berrispend import BerriSpendLogger
 from .integrations.supabase import Supabase
 from .integrations.llmonitor import LLMonitorLogger
 from .integrations.prompt_layer import PromptLayerLogger
-from .integrations.langsmith import LangsmithLogger
 from .integrations.weights_biases import WeightsBiasesLogger
 from .integrations.custom_logger import CustomLogger
 from .integrations.langfuse import LangFuseLogger
@@ -66,7 +66,6 @@ slack_app = None
 alerts_channel = None
 heliconeLogger = None
 promptLayerLogger = None
-langsmithLogger = None
 weightsBiasesLogger = None
 customLogger = None
 langFuseLogger = None
@@ -225,7 +224,7 @@ class CallTypes(Enum):
 
 # Logging function -> log the exact model details + what's being sent | Non-Blocking
 class Logging:
-    global supabaseClient, liteDebuggerClient, promptLayerLogger, weightsBiasesLogger, langsmithLogger, capture_exception, add_breadcrumb
+    global supabaseClient, liteDebuggerClient, promptLayerLogger, weightsBiasesLogger, capture_exception, add_breadcrumb
 
     def __init__(self, model, messages, stream, call_type, start_time, litellm_call_id, function_id):
         if call_type not in [item.value for item in CallTypes]:
@@ -528,15 +527,7 @@ class Logging:
                             end_time=end_time,
                             print_verbose=print_verbose,
                         )
-                    if callback == "langsmith":
-                        print_verbose("reaches langsmtih for logging!")
-                        langsmithLogger.log_event(
-                            kwargs=self.model_call_details,
-                            response_obj=result,
-                            start_time=start_time,
-                            end_time=end_time,
-                            print_verbose=print_verbose,
-                        )
+
                     if callable(callback): # custom logger functions
                         customLogger.log_event(
                             kwargs=self.model_call_details,
@@ -1305,7 +1296,7 @@ def get_optional_params(  # use the openai defaults
                 optional_params["stream"] = stream
         else:
             ## check if unsupported param passed in 
-            supported_params = []
+            supported_params = ["temperature", "max_tokens", "stream", "top_p", "repetition_penalty", "stop"]
             _check_valid_arg(supported_params=supported_params)
     elif custom_llm_provider == "bedrock":
         if "ai21" in model:
@@ -1967,7 +1958,7 @@ def validate_environment(model: Optional[str]=None) -> dict:
     return {"keys_in_environment": keys_in_environment, "missing_keys": missing_keys} 
 
 def set_callbacks(callback_list, function_id=None):
-    global sentry_sdk_instance, capture_exception, add_breadcrumb, posthog, slack_app, alerts_channel, traceloopLogger, heliconeLogger, aispendLogger, berrispendLogger, supabaseClient, liteDebuggerClient, llmonitorLogger, promptLayerLogger, langFuseLogger, customLogger, weightsBiasesLogger, langsmithLogger
+    global sentry_sdk_instance, capture_exception, add_breadcrumb, posthog, slack_app, alerts_channel, traceloopLogger, heliconeLogger, aispendLogger, berrispendLogger, supabaseClient, liteDebuggerClient, llmonitorLogger, promptLayerLogger, langFuseLogger, customLogger, weightsBiasesLogger
     try:
         for callback in callback_list:
             print_verbose(f"callback: {callback}")
@@ -2032,8 +2023,6 @@ def set_callbacks(callback_list, function_id=None):
                 langFuseLogger = LangFuseLogger()
             elif callback == "wandb":
                 weightsBiasesLogger = WeightsBiasesLogger()
-            elif callback == "langsmith":
-                langsmithLogger = LangsmithLogger()
             elif callback == "aispend":
                 aispendLogger = AISpendLogger()
             elif callback == "berrispend":
@@ -3331,6 +3320,42 @@ def get_secret(secret_name):
 ######## Streaming Class ############################
 # wraps the completion stream to return the correct format for the model
 # replicate/anthropic/cohere
+class SmrInferenceStream:
+    def __init__(self):
+        # A buffered I/O stream to combine the payload parts:
+        self.buff = io.BytesIO() 
+        self.read_pos = 0
+
+    def stream_inference(self, event):
+        # Passes the contents of each payload part
+        # to be concatenated:
+        text = ""
+        start_json = b'{'
+        stop_token = "</s>"
+        self._write(event['PayloadPart']['Bytes'])
+        # Iterates over lines to parse whole JSON objects:
+        for line in self._readlines():
+            if line != b'' and start_json in line:
+                data = json.loads(line[line.find(start_json):].decode('utf-8'))
+                if data['token']['text'] != stop_token:
+                    text += data['token']['text']
+        return text
+
+    # Writes to the buffer to concatenate the contents of the parts:
+    def _write(self, content):
+        self.buff.seek(0, io.SEEK_END)
+        self.buff.write(content)
+
+    # The JSON objects in buffer end with '\n'.
+    # This method reads lines to yield a series of JSON objects:
+    def _readlines(self):
+        self.buff.seek(self.read_pos)
+        for line in self.buff.readlines():
+            if line and line[-1] == ord('\n'):
+                self.read_pos += len(line)
+                yield line[:-1]
+
+
 class CustomStreamWrapper:
     def __init__(self, completion_stream, model, custom_llm_provider=None, logging_obj=None):
         self.model = model
@@ -3573,6 +3598,20 @@ class CustomStreamWrapper:
                 raise Exception(chunk["error"])
             return {"text": text, "is_finished": is_finished, "finish_reason": finish_reason}
         return ""
+    
+    def handle_sagemaker_stream(self, event):
+        smr = SmrInferenceStream()
+        if event.get('PayloadPart', None):
+            # chunk_data = json.loads(chunk.get('Bytes').decode())
+            is_finished = False
+            finish_reason = ""
+            text = smr.stream_inference(event)
+            return {"text": text, "is_finished": is_finished, "finish_reason": finish_reason}
+        elif event.get('ModelStreamError', None):
+            raise Exception(event["ModelStreamError"]["Message"])
+        elif event.get('InternalStreamFailure', None):
+            raise Exception(event["InternalStreamFailure"]["Message"])
+        return ""
 
     ## needs to handle the empty string case (even starting chunk can be an empty string)
     def __next__(self):
@@ -3665,6 +3704,22 @@ class CustomStreamWrapper:
                     if response_obj["is_finished"]: 
                         model_response.choices[0].finish_reason = response_obj["finish_reason"]
                 elif self.custom_llm_provider == "sagemaker":
+                    try: 
+                        chunk = next(self.completion_stream)
+                        response_obj = self.handle_sagemaker_stream(chunk)
+                        completion_obj["content"] = response_obj["text"]
+                        if response_obj["is_finished"]: 
+                            model_response.choices[0].finish_reason = response_obj["finish_reason"]
+                    except Exception as e:
+                        raise e
+                        # if self.sent_last_chunk:
+                        #     raise e
+                        # else:
+                        #     if self.sent_first_chunk is False: 
+                        #         raise Exception("An unknown error occurred with the stream")
+                        #     model_response.choices[0].finish_reason = "stop"
+                        #     self.sent_last_chunk = True
+                elif self.custom_llm_provider == "sagemaker-fake":
                     if len(self.completion_stream)==0:
                         if self.sent_last_chunk: 
                             raise StopIteration
