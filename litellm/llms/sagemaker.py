@@ -68,6 +68,12 @@ def completion(
     aws_secret_access_key = optional_params.pop("aws_secret_access_key", None)
     aws_access_key_id = optional_params.pop("aws_access_key_id", None)
     aws_region_name = optional_params.pop("aws_region_name", None)
+    temperature = optional_params.pop("tempareture", 0.01)
+    top_p = optional_params.pop("top_p", 0.99)
+    max_new_tokens = optional_params.pop("max_tokens", 512)
+    repetition_penalty = optional_params.pop("repetition_penalty", 1.03)
+    stop = optional_params.pop("stop", [])
+    stream = optional_params.pop("stream", True)
 
     if aws_access_key_id != None:
         # uses auth params passed to completion
@@ -86,7 +92,7 @@ def completion(
         # I assume majority of users use .env for auth 
         region_name = (
             get_secret("AWS_REGION_NAME") or
-            "us-west-2"  # default to us-west-2 if user not specified
+            "eu-west-1"  # default to us-west-2 if user not specified
         )
         client = boto3.client(
             service_name="sagemaker-runtime",
@@ -94,7 +100,12 @@ def completion(
         )
     
     # pop streaming if it's in the optional params as 'stream' raises an error with sagemaker
-    inference_params = deepcopy(optional_params)
+    inference_params = {"temperature": temperature,
+                        "max_new_tokens": max_new_tokens,
+                        "top_p": top_p,
+                        "repetition_penalty": repetition_penalty,
+                        "stop": stop,
+                        "return_full_text": False}
     inference_params.pop("stream", None)
 
     ## Load Config
@@ -120,7 +131,8 @@ def completion(
 
     data = {
         "inputs": prompt,
-        "parameters": inference_params
+        "parameters": inference_params,
+        "stream": True
     }
 
     ## LOGGING
@@ -130,6 +142,18 @@ def completion(
             additional_args={"complete_input_dict": data},
         )
     ## COMPLETION CALL
+    if stream == True:
+        accept = 'application/json'
+        contentType = 'application/json'
+        response = client.invoke_endpoint_with_response_stream(
+            EndpointName=model,
+            Body=json.dumps(data),
+            Accept=accept,
+            ContentType=contentType
+        )
+        response = response.get('Body')
+        return response
+    
     response = client.invoke_endpoint(
         EndpointName=model,
         ContentType="application/json",
