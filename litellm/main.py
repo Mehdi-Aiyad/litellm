@@ -940,6 +940,12 @@ def completion(
             ## RESPONSE OBJECT
             response = model_response
         elif custom_llm_provider == "sagemaker":
+            kwargs["temperature"] = optional_params.pop("tempareture", 0.01)
+            kwargs["top_p"] = optional_params.pop("top_p", 0.99)
+            kwargs["max_new_tokens"] = optional_params.pop("max_tokens", 512)
+            kwargs["repetition_penalty"] = optional_params.pop("repetition_penalty", 1.03)
+            kwargs["stop"] = optional_params.pop("stop", [])
+            kwargs["stream"] = optional_params.pop("stream", True)
             # boto3 reads keys from .env
             model_response = sagemaker.completion(
                 model=model,
