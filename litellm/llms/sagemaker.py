@@ -104,7 +104,6 @@ def completion(
                         "max_new_tokens": max_new_tokens,
                         "top_p": top_p,
                         "repetition_penalty": repetition_penalty,
-                        "stop": stop,
                         "return_full_text": False}
     inference_params.pop("stream", None)
 
