@@ -3724,7 +3724,7 @@ class CustomStreamWrapper:
 							if self.sent_first_chunk is False: 
 								raise Exception("An unknown error occurred with the stream")
 							model_response.choices[0].finish_reason = "stop"
-                            self.sent_last_chunk = True
+							self.sent_last_chunk = True
                 elif self.custom_llm_provider == "sagemaker-fake":
                     if len(self.completion_stream)==0:
                         if self.sent_last_chunk: 
