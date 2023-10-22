@@ -102,7 +102,7 @@ def completion(
     # pop streaming if it's in the optional params as 'stream' raises an error with sagemaker
     inference_params = {"temperature": temperature,
                         "max_new_tokens": max_new_tokens,
-                        "top_p": top_p,
+                        "top_p": 0.99,
                         "repetition_penalty": repetition_penalty,
                         "return_full_text": False}
     inference_params.pop("stream", None)
