@@ -3704,26 +3704,26 @@ class CustomStreamWrapper:
                     if response_obj["is_finished"]: 
                         model_response.choices[0].finish_reason = response_obj["finish_reason"]
                 elif self.custom_llm_provider == "sagemaker":
-                    try: 
-                        chunk = next(self.completion_stream)
-		    except StopIteration as e:
-                        if self.sent_last_chunk: 
-                            raise e 
-                        else:
-                            model_response.choices[0].finish_reason = "stop"
-                            self.sent_last_chunk = True
-		    try:
-                        response_obj = self.handle_sagemaker_stream(chunk)
-                        completion_obj["content"] = response_obj["text"]
-                        if response_obj["is_finished"]: 
-                            model_response.choices[0].finish_reason = response_obj["finish_reason"]
-                    except Exception as e:
-                        if self.sent_last_chunk:
-                            raise e
-                        else:
-                            if self.sent_first_chunk is False: 
-                                raise Exception("An unknown error occurred with the stream")
-                            model_response.choices[0].finish_reason = "stop"
+					try:
+						chunk = next(self.completion_stream)
+					except StopIteration as e:
+						if self.sent_last_chunk:
+							raise e 
+						else:
+							model_response.choices[0].finish_reason = "stop"
+							self.sent_last_chunk = True
+					try:
+						response_obj = self.handle_sagemaker_stream(chunk)
+						completion_obj["content"] = response_obj["text"]
+						if response_obj["is_finished"]:
+							model_response.choices[0].finish_reason = response_obj["finish_reason"]
+					except Exception as e:
+						if self.sent_last_chunk:
+							raise e
+						else:
+							if self.sent_first_chunk is False: 
+								raise Exception("An unknown error occurred with the stream")
+							model_response.choices[0].finish_reason = "stop"
                             self.sent_last_chunk = True
                 elif self.custom_llm_provider == "sagemaker-fake":
                     if len(self.completion_stream)==0:
