@@ -3718,7 +3718,7 @@ class CustomStreamWrapper:
                         if response_obj["is_finished"]:
                             model_response.choices[0].finish_reason = response_obj["finish_reason"]
                     except Exception as e:
-			raise e
+                        raise e
                         # if self.sent_last_chunk:
                         #     raise e
                         # else:
