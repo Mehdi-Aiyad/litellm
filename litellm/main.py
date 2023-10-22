@@ -943,7 +943,6 @@ def completion(
             kwargs["temperature"] = tempareture
             kwargs["top_p"] = top_p
             kwargs["max_new_tokens"] = max_tokens
-            kwargs["repetition_penalty"] = optional_params.pop("repetition_penalty
             kwargs["stop"] = stop
             kwargs["stream"] = stream
             # boto3 reads keys from .env
