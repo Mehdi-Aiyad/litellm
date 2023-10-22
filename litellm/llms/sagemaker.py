@@ -141,7 +141,7 @@ def completion(
             additional_args={"complete_input_dict": data},
         )
     ## COMPLETION CALL
-    if stream == True:
+    if True:
         accept = 'application/json'
         contentType = 'application/json'
         response = client.invoke_endpoint_with_response_stream(
