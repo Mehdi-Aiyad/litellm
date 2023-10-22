@@ -940,7 +940,7 @@ def completion(
             ## RESPONSE OBJECT
             response = model_response
         elif custom_llm_provider == "sagemaker":
-            kwargs["temperature"] = tempareture
+            kwargs["temperature"] = temperature
             kwargs["top_p"] = top_p
             kwargs["max_new_tokens"] = max_tokens
             kwargs["stop"] = stop
