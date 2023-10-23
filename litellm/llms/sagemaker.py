@@ -103,6 +103,7 @@ def completion(
     inference_params = {"temperature": temperature,
                         "max_new_tokens": max_new_tokens,
                         "top_p": 0.99,
+                        "stop": stop,
                         "repetition_penalty": repetition_penalty,
                         "return_full_text": False}
     inference_params.pop("stream", None)
